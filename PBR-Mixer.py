@@ -118,21 +118,25 @@ tempMaterials = hou.copyNodesTo(selectedMaterials,hou.node(materialRoot))
 for tempMaterial in tempMaterials:
     index = tempMaterials.index(tempMaterial)  
 
-    # Rename some nodes for better distinction
     for n in tempMaterial.children():        
+        # Rename some nodes for better distinction        
         if n.name() == "UVAttrib" or n.name() == "UVControl":
-            n.setName(n.name()+"_"+selectedMaterials[index].name())
+            n.setName(n.name()+"_"+selectedMaterials[index].name())          
         
         # Set new poisitions        
         n.move(hou.Vector2(0,index*-25))
 
         # Delete relative paths
         for parm in n.parms():
-            print(parm.eval())
-            parm.set(parm.eval())
-
+            parm.deleteAllKeyframes()
+            
+        # Delete unused output nodes            
+        if n.name() == "surface_output" or n.name() == "displacement_output":
+            n.destroy()          
+            
     # Copy the nodes from the temp materials to the new material
     newNodes = hou.copyNodesTo(tempMaterial.children(), newMaterial)
+
     
     # Create network box around each material's nodes
     box = newMaterial.createNetworkBox()
@@ -141,6 +145,9 @@ for tempMaterial in tempMaterials:
     for n in newNodes:
         box.addItem(n)
     box.fitAroundContents()   
+    
+
+    
 
 # TODO: DELETE RELATIVE REFERENCES BEFORE COPY TO OTHER NETWORK
 # TODO: ACTUAL LOGIC BEHIND CONNECTING STUFF
