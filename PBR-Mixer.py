@@ -36,6 +36,7 @@ def materialSelection():
     selectedNodes = hou.selectedNodes()
 
     if len(selectedNodes) < 2:
+        errorPrint("You have to select more than one material!", "e")
         hou.ui.displayMessage("You have to select more than one material!")
         exit()
     else:
@@ -59,7 +60,23 @@ def materialNaming():
         errorPrint(f"A material name has been chosen: {userInput[1]}", "s")
         return userInput[1]
 
+# Create and connect surface_output node
+def create_surfaceOutput(material, lastMix):
+    output_surface = material.createNode("subnetconnector","surface_output")
+    output_surface.parm("connectorkind").set("output")
+    output_surface.parm("parmname").set("surface")
+    output_surface.parm("parmlabel").set("Surface")
+    output_surface.parm("parmtype").set("surface")
+    output_surface.setInput(0, lastMix)
 
+# Create and connect displacement_output node
+def create_displacementOutput(material, lastMix):
+    output_disp = material.createNode("subnetconnector","displacement_output")
+    output_disp.parm("connectorkind").set("output")
+    output_disp.parm("parmname").set("displacement")
+    output_disp.parm("parmlabel").set("Displacement")
+    output_disp.parm("parmtype").set("displacement") 
+    output_disp.setInput(0, lastMix) 
 
 print("------------------------------------------------")         
 errorPrint("Starting PBR Mixer.","i")
@@ -112,7 +129,7 @@ newMaterial.setParmTemplateGroup(parameters)
 for c in newMaterial.allSubChildren():
     c.destroy()
 
-# Create temp copy of materials for renamings etc...
+# Create temp maerial, copy of nodes and restructure etc...
 tempMaterials = hou.copyNodesTo(selectedMaterials,hou.node(materialRoot))
 
 for tempMaterial in tempMaterials:
@@ -128,15 +145,10 @@ for tempMaterial in tempMaterials:
 
         # Delete relative paths
         for parm in n.parms():
-            parm.deleteAllKeyframes()
-            
-        # Delete unused output nodes            
-        if n.name() == "surface_output" or n.name() == "displacement_output":
-            n.destroy()          
+            parm.deleteAllKeyframes()      
             
     # Copy the nodes from the temp materials to the new material
     newNodes = hou.copyNodesTo(tempMaterial.children(), newMaterial)
-
     
     # Create network box around each material's nodes
     box = newMaterial.createNetworkBox()
@@ -145,13 +157,46 @@ for tempMaterial in tempMaterials:
     for n in newNodes:
         box.addItem(n)
     box.fitAroundContents()   
-    
 
+# Actual conection logic
+connectors = []    
     
+for node in newMaterial.children():
+    # Get the nodes that are connected to the surface_outputs inside a list, then delete them
+    if "surface_output" in node.name():
+        connectors.append(node.inputs()[0])
+        node.destroy()        
+        
+# Create mixer nodes        
+mixNodes = []        
 
-# TODO: DELETE RELATIVE REFERENCES BEFORE COPY TO OTHER NETWORK
-# TODO: ACTUAL LOGIC BEHIND CONNECTING STUFF
+while len(connectors)>1:     
+    newMix = hou.node(newMaterial.path()).createNode("mtlxmix", f"{connectors[0]}_to_{connectors[1]}")
+    mixNodes.append(newMix)
+    
+    newMix.moveToGoodPosition()
+    
+    newMix.setInput(0, connectors[0])
+    newMix.setInput(1, connectors[1])
+    
+    del connectors[0:2]
+    
+    connectors.insert(0, newMix)
+
+
+# Create output nodes and connect them to the last mixer nodes    
+create_surfaceOutput(newMaterial, mixNodes[-1])
+# create_displacementOutput(newMaterial)
 
 # Delete temp copy of materials
 for t in tempMaterials:
     t.destroy()
+    
+errorPrint(f"New material was created at: {newMaterial.path()}","s")
+errorPrint(f"Ending script","i")
+print("------------------------------------------------")    
+
+
+# TODO: displacement logic
+# pack up in definition
+# loading bar?
